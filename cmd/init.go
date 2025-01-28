@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"time"
+	"encoding/json"
+    "strings"
 
 	"github.com/bitswan-space/bitswan-gitops-cli/internal/caddyapi"
 	"github.com/bitswan-space/bitswan-gitops-cli/internal/dockercompose"
@@ -18,6 +20,17 @@ type initOptions struct {
 	remoteRepo string
 	domain     string
 	certsDir   string
+}
+
+type DockerNetwork struct {
+    Name      string `json:"Name"`
+    ID        string `json:"ID"`
+    CreatedAt string `json:"CreatedAt"`
+    Driver    string `json:"Driver"`
+    IPv6      string `json:"IPv6"`
+    Internal  string `json:"Internal"`
+    Labels    string `json:"Labels"`
+    Scope     string `json:"Scope"`
 }
 
 func defaultInitOptions() *initOptions {
@@ -45,6 +58,32 @@ func cleanup(dir string) {
 	if err := os.RemoveAll(dir); err != nil {
 		fmt.Printf("Failed to clean up directory %s: %s\n", dir, err)
 	}
+}
+
+func checkNetworkExists(networkName string) (bool, error) {
+    // Run docker network ls command with JSON format
+    cmd := exec.Command("docker", "network", "ls", "--format=json")
+    output, err := cmd.Output()
+    if err != nil {
+        return false, fmt.Errorf("error running docker command: %v", err)
+    }
+
+    // Split output into lines
+    lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+
+    // Process each line
+    for _, line := range lines {
+        var network DockerNetwork
+        if err := json.Unmarshal([]byte(line), &network); err != nil {
+            return false, fmt.Errorf("error parsing JSON: %v", err)
+        }
+
+        if network.Name == networkName {
+            return true, nil
+        }
+    }
+
+    return false, nil
 }
 
 func (o *initOptions) run(cmd *cobra.Command, args []string) error {
@@ -270,18 +309,27 @@ func (o *initOptions) run(cmd *cobra.Command, args []string) error {
 		panic(fmt.Errorf("Failed to get latest BitSwan Editor version: %w", err))
 	}
 
-	createDockerNetworkCom := exec.Command("docker", "network", "create", "bitswan_network")
+    networkName := "bitswan_network"
+    exists, err := checkNetworkExists(networkName)
+    if err != nil {
+        panic(fmt.Errorf("Error checking network: %v\n", err))
+    }
 
-	fmt.Println("Creating BitSwan Docker network...")
-	if err := createDockerNetworkCom.Run(); err != nil {
-		if err.Error() == "exit status 1" {
-			fmt.Println("BitSwan Docker network already exists!")
-		} else {
-			fmt.Printf("Failed to create BitSwan Docker network: %s\n", err.Error())
-		}
-	} else {
-		fmt.Println("BitSwan Docker network created!")
-	}
+    if exists {
+        fmt.Printf("Network '%s' exists\n", networkName)
+    } else {
+        createDockerNetworkCom := exec.Command("docker", "network", "create", "bitswan_network")
+        fmt.Println("Creating BitSwan Docker network...")
+        if err := createDockerNetworkCom.Run(); err != nil {
+            if err.Error() == "exit status 1" {
+                fmt.Println("BitSwan Docker network already exists!")
+            } else {
+                fmt.Printf("Failed to create BitSwan Docker network: %s\n", err.Error())
+            }
+        } else {
+            fmt.Println("BitSwan Docker network created!")
+        }
+    }
 
 	fmt.Println("Setting up GitOps deployment...")
 	gitopsDeployment := gitopsConfig + "/deployment"
