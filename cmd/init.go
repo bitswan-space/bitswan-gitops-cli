@@ -116,6 +116,19 @@ func (o *initOptions) run(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// This is simpler with package strings, but that requires Go >=1.21
+	// o.domain = fmt.Sprintf("%s.%s", gitopsName, strings.TrimPrefix(strings.TrimPrefix(o.domain, "https://"), "http://"))
+	{
+		httpPrefix := "http://"
+		httpsPrefix := "https://"
+		prefixLen := len(httpsPrefix)
+		if len(o.domain) >= prefixLen && o.domain[:prefixLen] == httpsPrefix {
+			o.domain = o.domain[prefixLen:]
+		} else if len(o.domain) >= len(httpPrefix) && o.domain[:len(httpPrefix)] == httpPrefix {
+			o.domain = o.domain[len(httpPrefix):]
+		}
+	}
+	fmt.Printf("DOMAIN %s\n", o.domain)
 	// Init bitswan network
 	networkName := "bitswan_network"
 	exists, err := checkNetworkExists(networkName)
@@ -141,7 +154,7 @@ func (o *initOptions) run(cmd *cobra.Command, args []string) error {
 
 	// Init shared Caddy if not exists
 	caddyConfig := bitswanConfig + "caddy"
-  caddyCertsDir := caddyConfig + "/certs"
+	caddyCertsDir := caddyConfig + "/certs"
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -444,7 +457,7 @@ func (o *initOptions) run(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("------------GITOPS INFO------------")
 	fmt.Printf("GitOps ID: %s\n", gitopsName)
-	fmt.Printf("GitOps URL: https://%s\n", o.domain)
+	fmt.Printf("GitOps URL: https://%s.%s\n", gitopsName, o.domain)
 	fmt.Printf("GitOps Secret: %s\n", token)
 
 	return nil
