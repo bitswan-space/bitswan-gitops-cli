@@ -336,7 +336,7 @@ func (o *initOptions) run(cmd *cobra.Command, args []string) error {
 		gitopsName = args[0]
 	}
 
-	gitopsConfig := bitswanConfig + gitopsName
+	gitopsConfig := bitswanConfig + "workspaces/" + gitopsName
 
 	defer func() {
 		if r := recover(); r != nil {
