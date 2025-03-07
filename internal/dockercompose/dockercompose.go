@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"path/filepath"
 
 	"github.com/dchest/uniuri"
 	"gopkg.in/yaml.v3"
@@ -113,6 +114,7 @@ func CreateDockerComposeFile(gitopsPath, gitopsName, gitopsImage, bitswanEditorI
 				gitopsPath + "/workspace:/home/coder/workspace/workspace",
 				gitopsPath + "/secrets:/home/coder/workspace/secrets",
 				gitopsPath + "/codeserver-config:/home/coder/.config/code-server/",
+				filepath.Dir(filepath.Dir(gitopsPath)) + "/bitswan-src/examples:/home/coder/workspace/examples:ro",
 				sshDir + ":/home/coder/.ssh",
 				"bitswan-editor-data:/home/coder",
 			},

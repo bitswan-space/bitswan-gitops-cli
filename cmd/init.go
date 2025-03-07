@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
+	"path/filepath"
 
 	"github.com/bitswan-space/bitswan-gitops-cli/internal/caddyapi"
 	"github.com/bitswan-space/bitswan-gitops-cli/internal/dockercompose"
@@ -114,6 +114,65 @@ func runCommandVerbose(cmd *exec.Cmd, verbose bool) error {
 	}
 	return err
 }
+
+
+// EnsureExamples clones the BitSwan repository if it doesn't exist,
+// or updates it if it already exists
+func EnsureExamples(bitswanConfig string, verbose bool) error {
+    repoURL := "https://github.com/bitswan-space/BitSwan.git"
+    targetDir := filepath.Join(bitswanConfig, "bitswan-src")
+
+    // Check if the directory exists and contains a git repository
+    if _, err := os.Stat(filepath.Join(targetDir, ".git")); os.IsNotExist(err) {
+        // Directory doesn't exist or is not a git repo, clone it
+        if verbose {
+            fmt.Printf("Cloning BitSwan repository to %s\n", targetDir)
+        }
+
+        // Create parent directory if it doesn't exist
+        if err := os.MkdirAll(filepath.Dir(targetDir), 0755); err != nil {
+            return fmt.Errorf("failed to create parent directory: %w", err)
+        }
+
+        cmd := exec.Command("git", "clone", repoURL, targetDir)
+        if err := runCommandVerbose(cmd, verbose); err != nil {
+            return fmt.Errorf("failed to clone repository: %w", err)
+        }
+
+        if verbose {
+            fmt.Println("Repository cloned successfully")
+        }
+    } else {
+        // Directory exists and is a git repo, update it
+        if err := UpdateExamples(bitswanConfig, verbose); err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+
+// UpdateExamples performs a git pull on the repository
+func UpdateExamples(bitswanConfig string, verbose bool) error {
+
+    repoPath := filepath.Join(bitswanConfig, "bitswan-src")
+    if verbose {
+        fmt.Printf("Updating BitSwan repository at %s\n", repoPath)
+    }
+
+    cmd := exec.Command("git", "pull")
+    cmd.Dir = repoPath
+
+    if err := runCommandVerbose(cmd, verbose); err != nil {
+        return fmt.Errorf("failed to update repository: %w", err)
+    }
+
+    if verbose {
+        fmt.Println("Repository updated successfully")
+    }
+    return nil
+}
+
 
 func generateWildcardCerts(domain string) (string, error) {
 	// Create temporary directory
@@ -510,7 +569,13 @@ func (o *initOptions) run(cmd *cobra.Command, args []string) error {
 		panic(fmt.Errorf("Failed to add Caddy records: %w", err))
 	}
 
+	err = EnsureExamples(bitswanConfig, o.verbose)
+	if err != nil {
+		panic(fmt.Errorf("Failed to download examples: %w", err))
+	}
+
 	compose, token, err := dockercompose.CreateDockerComposeFile(
+
 		gitopsConfig,
 		gitopsName,
 		gitopsImage,
