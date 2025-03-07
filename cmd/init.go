@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"path/filepath"
+	"gopkg.in/yaml.v3"
 
 	"github.com/bitswan-space/bitswan-gitops-cli/internal/caddyapi"
 	"github.com/bitswan-space/bitswan-gitops-cli/internal/dockercompose"
@@ -154,6 +156,40 @@ func generateWildcardCerts(domain string) (string, error) {
 	}
 
 	return tempDir, nil
+}
+
+// After displaying the information, save it to metadata.yaml
+func saveMetadata(gitopsConfig, gitopsName, domain string, noIde bool) error {
+	// Create metadata structure
+	type Metadata struct {
+		Domain    string `yaml:"domain"`
+		EditorURL string `yaml:"editor-url,omitempty"`
+		GitopsURL string `yaml:"gitops-url"`
+	}
+
+	metadata := Metadata{
+		Domain:    domain,
+		GitopsURL: fmt.Sprintf("https://%s-gitops.%s", gitopsName, domain),
+	}
+
+	// Add editor URL if IDE is enabled
+	if !noIde {
+		metadata.EditorURL = fmt.Sprintf("https://%s-editor.%s", gitopsName, domain)
+	}
+
+	// Marshal to YAML
+	yamlData, err := yaml.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	// Write to file
+	metadataPath := filepath.Join(gitopsConfig, "metadata.yaml")
+	if err := os.WriteFile(metadataPath, yamlData, 0644); err != nil {
+		return fmt.Errorf("failed to write metadata file: %w", err)
+	}
+
+	return nil
 }
 
 func (o *initOptions) run(cmd *cobra.Command, args []string) error {
@@ -497,6 +533,11 @@ func (o *initOptions) run(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("BitSwan GitOps initialized successfully!")
+
+	// Save metadata to file
+	if err := saveMetadata(gitopsConfig, gitopsName, o.domain, o.noIde); err != nil {
+		fmt.Printf("Warning: Failed to save metadata: %v\n", err)
+	}
 
 	// Get Bitswan Editor password from container
 	if !o.noIde {
